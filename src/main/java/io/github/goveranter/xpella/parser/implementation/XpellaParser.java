@@ -65,9 +65,9 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 			throw new TypeRedeclarationException(typeName, new XpellaParserBookmark(this.inputStream));
 		}
 		
-		this.lexer.skipWhitespaces(false); // Eat whitespaces
+		this.lexer.skipWhitespaces(); // Eat whitespaces
 		this.lexer.eatChar("{");
-		this.lexer.skipWhitespaces(false); // Eat whitespaces
+		this.lexer.skipWhitespaces(); // Eat whitespaces
 		
 		this.currentThis = new XpellaASTTypeDeclaration(typeName, new ArrayList<>(), new ArrayList<>());
 		
@@ -185,7 +185,7 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 				this.lexer.eatChar(XpellaParserRules.LINE_DELIMITER);
 			}
 			
-			this.lexer.skipWhitespaces(false); // Eat whitespaces
+			this.lexer.skipWhitespaces(); // Eat whitespaces
 		}
 		
 		this.lexer.eatChar("}");
@@ -241,7 +241,7 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 				// User wants to have a default value
 				this.lexer.eatChar("=");
 				initialAssignation = this.parseExpression(0);
-				this.lexer.skipWhitespaces(false); // Eat whitespaces
+				this.lexer.skipWhitespaces(); // Eat whitespaces
 			}
 			
 			// Can't have a non default parameter after a default one
@@ -568,7 +568,7 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 		if (nextWord.equals("else"))
 		{
 			// We have a else
-			this.lexer.skipWhitespaces(false); // Eat whitespaces
+			this.lexer.skipWhitespaces(); // Eat whitespaces
 			XpellaParserBookmark failConditionBookmark = new XpellaParserBookmark(this.inputStream);
 			this.scopeManager.createChildScope(null);
 			failConditionExecution = this.optimizeScopedStatement(this.parseStatement(false), failConditionBookmark);
