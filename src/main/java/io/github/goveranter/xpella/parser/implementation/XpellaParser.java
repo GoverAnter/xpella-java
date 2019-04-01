@@ -403,7 +403,7 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 			this.checkReserved(possibleIdentifier, ipos);
 			
 			// Check if variable exists
-			if(this.scopeManager.exists(possibleIdentifier))
+			if(this.scopeManager.exists(possibleIdentifier, true))
 			{
 				this.inputStream.rewind(ipos.getPosition());
 				throw new ParserVariableAlreadyDeclaredException(possibleIdentifier, new XpellaParserBookmark(this.inputStream));
