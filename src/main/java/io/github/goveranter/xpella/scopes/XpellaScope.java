@@ -113,7 +113,9 @@ public class XpellaScope<T extends ScopeVariable>
 	 */
 	public boolean createInScope(T variable, boolean allowShadowing)
 	{
-		if((allowShadowing && this.existsInCurrentScope(variable.getIdentifier())) || this.existsInScopes(variable.getIdentifier()))
+		if(allowShadowing && this.existsInCurrentScope(variable.getIdentifier()))
+			return false;
+		else if(!allowShadowing && this.existsInScopes(variable.getIdentifier()))
 			return false;
 		
 		this.getCurrentScope().put(variable.getIdentifier(), variable);
