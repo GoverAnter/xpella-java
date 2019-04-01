@@ -8,9 +8,14 @@ public class XpellaASTFunctionDeclaration extends XpellaASTDeclaration
 	private List<String> modifiers;
 	private String returnType;
 	private List<XpellaASTVariableDeclaration> args;
-	private XpellaASTBlock execution;
+	private XpellaASTStatement execution;
 	
-	public XpellaASTFunctionDeclaration(String identifier, String visibility, List<String> modifiers, String returnType, List<XpellaASTVariableDeclaration> args, XpellaASTBlock execution)
+	public XpellaASTFunctionDeclaration(String identifier,
+										String visibility,
+										List<String> modifiers,
+										String returnType,
+										List<XpellaASTVariableDeclaration> args,
+										XpellaASTStatement execution)
 	{
 		super(identifier);
 		this.visibility = visibility;
@@ -20,7 +25,14 @@ public class XpellaASTFunctionDeclaration extends XpellaASTDeclaration
 		this.execution = execution;
 	}
 	
-	public XpellaASTFunctionDeclaration(List<XpellaASTAnnotation> annotations, String documentation, String identifier, String visibility, List<String> modifiers, String returnType, List<XpellaASTVariableDeclaration> args, XpellaASTBlock execution)
+	public XpellaASTFunctionDeclaration(List<XpellaASTAnnotation> annotations,
+										String documentation,
+										String identifier,
+										String visibility,
+										List<String> modifiers,
+										String returnType,
+										List<XpellaASTVariableDeclaration> args,
+										XpellaASTStatement execution)
 	{
 		super(annotations, documentation, identifier);
 		this.visibility = visibility;
@@ -75,7 +87,7 @@ public class XpellaASTFunctionDeclaration extends XpellaASTDeclaration
 	{
 		return args;
 	}
-	public XpellaASTBlock getExecution()
+	public XpellaASTStatement getExecution()
 	{
 		return execution;
 	}

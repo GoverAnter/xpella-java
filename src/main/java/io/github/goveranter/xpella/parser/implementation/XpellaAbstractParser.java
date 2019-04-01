@@ -6,6 +6,7 @@ import io.github.goveranter.xpella.exceptions.parser.MemberNotFoundException;
 import io.github.goveranter.xpella.exceptions.parser.TypeNotFoundException;
 import io.github.goveranter.xpella.parser.XpellaParserWarning;
 import io.github.goveranter.xpella.parser.headers.XpellaParserArgumentHeader;
+import io.github.goveranter.xpella.parser.headers.XpellaParserOperatorHeader;
 import io.github.goveranter.xpella.parser.headers.XpellaParserTypeHeader;
 import io.github.goveranter.xpella.parser.headers.XpellaParserVariableHeader;
 import io.github.goveranter.xpella.parser.helpers.XpellaInputStream;
@@ -13,9 +14,7 @@ import io.github.goveranter.xpella.parser.helpers.XpellaLexer;
 import io.github.goveranter.xpella.parser.helpers.XpellaParserBookmark;
 import io.github.goveranter.xpella.scopes.XpellaScopeManager;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 public abstract class XpellaAbstractParser
 {
@@ -26,7 +25,32 @@ public abstract class XpellaAbstractParser
 	protected XpellaInputStream inputStream;
 	protected XpellaLexer lexer;
 	
-	protected final List<XpellaParserTypeHeader> defaultTypes;
+	protected final List<XpellaParserTypeHeader> defaultTypes = Collections.unmodifiableList(List.of(
+			new XpellaParserTypeHeader("int", new ArrayList<>(), new ArrayList<>(), Map.ofEntries(
+					Map.entry("+", new XpellaParserOperatorHeader(false, false, List.of("int"))),
+					Map.entry("-", new XpellaParserOperatorHeader(false, false, List.of("int"))),
+					Map.entry("/", new XpellaParserOperatorHeader(false, false, List.of("int"))),
+					Map.entry("*", new XpellaParserOperatorHeader(false, false, List.of("int"))),
+					Map.entry("%", new XpellaParserOperatorHeader(false, false, List.of("int"))),
+					Map.entry("<", new XpellaParserOperatorHeader(false, false, List.of("int", "float"))),
+					Map.entry(">", new XpellaParserOperatorHeader(false, false, List.of("int", "float"))),
+					Map.entry("<=", new XpellaParserOperatorHeader(false, false, List.of("int", "float"))),
+					Map.entry(">=", new XpellaParserOperatorHeader(false, false, List.of("int", "float"))),
+					Map.entry("++", new XpellaParserOperatorHeader(true, true, new ArrayList<>())),
+					Map.entry("--", new XpellaParserOperatorHeader(true, true, new ArrayList<>())),
+					Map.entry("=", new XpellaParserOperatorHeader(false, false, List.of("int", "boolean")))
+			)),
+			new XpellaParserTypeHeader("string", new ArrayList<>(), new ArrayList<>(), Map.ofEntries(
+					Map.entry("+", new XpellaParserOperatorHeader(false, false, List.of("string", "int", "float", "boolean"))),
+					Map.entry("=", new XpellaParserOperatorHeader(false, false, List.of("string", "int", "float", "boolean")))
+			)),
+			new XpellaParserTypeHeader("boolean", new ArrayList<>(), new ArrayList<>(), Map.ofEntries(
+					Map.entry("&&", new XpellaParserOperatorHeader(false, false, List.of("boolean"))),
+					Map.entry("||", new XpellaParserOperatorHeader(false, false, List.of("boolean"))),
+					Map.entry("!", new XpellaParserOperatorHeader(false, true, new ArrayList<>())),
+					Map.entry("=", new XpellaParserOperatorHeader(false, false, List.of("boolean", "int")))
+			))
+	));
 	
 	protected XpellaScopeManager<XpellaParserVariableHeader> scopeManager;
 	

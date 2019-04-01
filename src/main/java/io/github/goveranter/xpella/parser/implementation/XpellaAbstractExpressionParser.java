@@ -30,7 +30,7 @@ public abstract class XpellaAbstractExpressionParser extends XpellaAbstractVaria
 			throws ScopeException, WrongMethodArgumentsException, UnexpectedCharacterException, NoThisException,
 			TypeNotFoundException, MemberNotFoundException, NoMethodReturnTypeException, StaticCallException,
 			MethodNotFoundException, UnmetExpectationException, NotAFunctionException, NoDeclaredOperatorException,
-			WrongOperatorArgumentTypeException
+			TypeCoercionException
 	{
 		return this.solveExpression(this.parseNextExpression(false), precedence);
 	}
@@ -40,7 +40,7 @@ public abstract class XpellaAbstractExpressionParser extends XpellaAbstractVaria
 			throws ScopeException, WrongMethodArgumentsException, UnexpectedCharacterException, NoThisException,
 			TypeNotFoundException, MemberNotFoundException, NoMethodReturnTypeException, StaticCallException,
 			MethodNotFoundException, UnmetExpectationException, NotAFunctionException, NoDeclaredOperatorException,
-			WrongOperatorArgumentTypeException
+			TypeCoercionException
 	{
 		this.lexer.skipWhitespaces(); // Eat whitespaces
 		this.lexer.eatChar("(");
@@ -71,7 +71,7 @@ public abstract class XpellaAbstractExpressionParser extends XpellaAbstractVaria
 			throws ScopeException, WrongMethodArgumentsException, UnexpectedCharacterException, NoThisException,
 			TypeNotFoundException, MemberNotFoundException, NoMethodReturnTypeException, StaticCallException,
 			MethodNotFoundException, UnmetExpectationException, NotAFunctionException, NoDeclaredOperatorException,
-			WrongOperatorArgumentTypeException
+			TypeCoercionException
 	{
 		this.lexer.skipWhitespaces(); // Eat whitespaces
 		// Peek operator
@@ -113,7 +113,7 @@ public abstract class XpellaAbstractExpressionParser extends XpellaAbstractVaria
 						&& !lhsType.getOperators().get(operator).getAcceptedTypes().contains(rhs.getResolvedType()))
 				{
 					this.inputStream.rewind(rhsPosition);
-					throw new WrongOperatorArgumentTypeException(operator, lhs.getResolvedType(), rhs.getResolvedType(),
+					throw new TypeCoercionException(operator, lhs.getResolvedType(), rhs.getResolvedType(),
 							new XpellaParserBookmark(this.inputStream));
 				}
 				return this.solveExpression(
@@ -131,7 +131,7 @@ public abstract class XpellaAbstractExpressionParser extends XpellaAbstractVaria
 			throws ScopeException, WrongMethodArgumentsException, UnexpectedCharacterException, NoThisException,
 			TypeNotFoundException, MemberNotFoundException, NoMethodReturnTypeException, StaticCallException,
 			MethodNotFoundException, UnmetExpectationException, NotAFunctionException, NoDeclaredOperatorException,
-			WrongOperatorArgumentTypeException
+			TypeCoercionException
 	{
 		this.lexer.skipWhitespaces(); // Eat whitespaces
 		
@@ -269,7 +269,7 @@ public abstract class XpellaAbstractExpressionParser extends XpellaAbstractVaria
 			throws ScopeException, WrongMethodArgumentsException, UnexpectedCharacterException, NoThisException,
 			TypeNotFoundException, MemberNotFoundException, NoMethodReturnTypeException, StaticCallException,
 			MethodNotFoundException, UnmetExpectationException, NotAFunctionException, NoDeclaredOperatorException,
-			WrongOperatorArgumentTypeException
+			TypeCoercionException
 	{
 		this.lexer.skipWhitespaces(); // Eat whitespaces
 		if (this.inputStream.peek().equals(XpellaParserRules.OBJECT_ACCESSOR))
@@ -329,7 +329,7 @@ public abstract class XpellaAbstractExpressionParser extends XpellaAbstractVaria
 			throws ScopeException, WrongMethodArgumentsException, UnexpectedCharacterException, NoThisException,
 			TypeNotFoundException, MemberNotFoundException, NoMethodReturnTypeException, StaticCallException,
 			MethodNotFoundException, UnmetExpectationException, NotAFunctionException, NoDeclaredOperatorException,
-			WrongOperatorArgumentTypeException
+			TypeCoercionException
 	{
 		this.lexer.skipWhitespaces(); // Eat whitespaces
 		int initialPosition = this.inputStream.getCurrentPosition();

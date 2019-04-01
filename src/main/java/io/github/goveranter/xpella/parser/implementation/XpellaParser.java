@@ -24,9 +24,12 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 	// This is the main parse method
 	public XpellaASTProgram executeParse()
 			throws UnmetExpectationException, UnexpectedCharacterException, TypeRedeclarationException, NoThisException,
-			MethodNotFoundException, WrongMethodArgumentsException, WrongOperatorArgumentTypeException, ScopeException,
+			MethodNotFoundException, WrongMethodArgumentsException, TypeCoercionException, DefaultArgumentOrderException,
 			NoDeclaredOperatorException, MemberNotFoundException, NoMethodReturnTypeException, StaticCallException,
-			TypeNotFoundException, NotAFunctionException, NameReservedException
+			TypeNotFoundException, NotAFunctionException, NameReservedException, ParserVariableAlreadyDeclaredException,
+			CannotAssignValueException, VariableAssignmentException, MemberAlreadyDeclared, UndefinedOperatorException,
+			ComplexAssignmentException, InvalidModifierException, MultipleVisibilityModifiersException, ScopeException,
+			NameConflictException
 	{
 		List<XpellaASTTypeDeclaration> types = new ArrayList<>();
 		this.lexer.skipWhitespaces(); // Eat whitespaces
@@ -42,9 +45,12 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 	
 	public XpellaASTTypeDeclaration parseType()
 			throws UnmetExpectationException, UnexpectedCharacterException, TypeRedeclarationException, NoThisException,
-			MethodNotFoundException, WrongMethodArgumentsException, WrongOperatorArgumentTypeException, ScopeException,
+			MethodNotFoundException, WrongMethodArgumentsException, TypeCoercionException, DefaultArgumentOrderException,
 			NoDeclaredOperatorException, MemberNotFoundException, NoMethodReturnTypeException, StaticCallException,
-			TypeNotFoundException, NotAFunctionException, NameReservedException
+			TypeNotFoundException, NotAFunctionException, NameReservedException, ParserVariableAlreadyDeclaredException,
+			CannotAssignValueException, VariableAssignmentException, MemberAlreadyDeclared, UndefinedOperatorException,
+			ComplexAssignmentException, InvalidModifierException, MultipleVisibilityModifiersException, ScopeException,
+			NameConflictException
 	{
 		this.lexer.skipWhitespaces(); // Eat whitespaces
 		
@@ -90,9 +96,9 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 			else if (words.size() == 1)
 				throw new UnmetExpectationException("Expected identifier, got \"" + this.inputStream.peek() + "\"", new XpellaParserBookmark(this.inputStream));
 			
-			String name;
-			String type;
-			String visibility;
+			String name = null;
+			String type = null;
+			String visibility = null;
 			List<String> modifiers = new ArrayList<>();
 			for(int i = 0; i < words.size(); i++) {
 				String currentWord = words.get(i);
@@ -103,12 +109,12 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 					if(this.currentThis.getMethods().stream().anyMatch(meth -> meth.getIdentifier().equals(currentWord)))
 					{
 						this.inputStream.rewind(positions.get(i).getPosition());
-						this.inputStream.throw('XP0415: "' + currentWord + '" is already declared as a method of this class');
+						throw new MemberAlreadyDeclared(currentWord, false, new XpellaParserBookmark(this.inputStream));
 					}
 					if(this.currentThis.getMembers().stream().anyMatch(mem -> mem.getIdentifier().equals(currentWord)))
 					{
 						this.inputStream.rewind(positions.get(i).getPosition());
-						this.inputStream.throw('XP0416: "' + currentWord + '" is already declared as a member of this class');
+						throw new MemberAlreadyDeclared(currentWord, true, new XpellaParserBookmark(this.inputStream));
 					}
 					name = currentWord;
 				}
@@ -131,7 +137,7 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 						if(visibility != null)
 						{
 							this.inputStream.rewind(positions.get(i).getPosition());
-							this.inputStream.throw('XP0418: Having more than one visibility modifier is forbidden');
+							throw new MultipleVisibilityModifiersException(new XpellaParserBookmark(this.inputStream));
 						}
 						visibility = currentWord;
 					}
@@ -141,7 +147,7 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 						if(!XpellaParserRules.MODIFIERS.contains(currentWord))
 						{
 							this.inputStream.rewind(positions.get(i).getPosition());
-							this.inputStream.throw('XP0419: "' + currentWord + '" is not a valid modifier');
+							throw new InvalidModifierException(currentWord, new XpellaParserBookmark(this.inputStream));
 						}
 						modifiers.add(currentWord);
 					}
@@ -159,7 +165,7 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 						.collect(Collectors.toList()));
 				
 				this.currentThis.getMethods().add(new XpellaASTFunctionDeclaration(name, visibility, modifiers, type,
-						args, (XpellaASTBlock)this.parseBlock(true)));
+						args, this.parseBlock(true)));
 				this.scopeManager.removeMaskingScope();
 				this.currentFunctionExpectedReturnType = null; // Just in case...
 			}
@@ -191,7 +197,10 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 	}
 	
 	public List<XpellaASTVariableDeclaration> parseSimpleVariableDeclarationList(String currentType)
-			throws UnexpectedCharacterException, UnmetExpectationException
+			throws UnmetExpectationException, UnexpectedCharacterException, NoThisException, NotAFunctionException,
+			MethodNotFoundException, WrongMethodArgumentsException, TypeCoercionException, ScopeException,
+			NoDeclaredOperatorException, MemberNotFoundException, NoMethodReturnTypeException, StaticCallException,
+			TypeNotFoundException, DefaultArgumentOrderException
 	{
 		this.lexer.skipWhitespaces(); // Eat whitespaces
 		this.lexer.eatChar("(");
@@ -210,7 +219,7 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 			else if(!this.typeExists(type) && !type.equals(currentType))
 			{
 				this.inputStream.rewind(this.inputStream.getCurrentPosition() - type.length());
-				this.inputStream.throw('XP041B: Type "' + type + '" does not exists');
+				throw new TypeNotFoundException(type, new XpellaParserBookmark(this.inputStream));
 			}
 			
 			this.lexer.skipWhitespaces(); // Eat whitespaces
@@ -227,39 +236,38 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 			
 			this.lexer.skipWhitespaces(); // Eat whitespaces
 			
-			let initialAssignation = null;
-			if (this.inputStream.peek() === '=') {
+			XpellaASTExpression initialAssignation = null;
+			if (this.inputStream.peek().equals("=")) {
 				// User wants to have a default value
-				this.lexer.eatChar('=');
-				initialAssignation = this.parseExpression();
+				this.lexer.eatChar("=");
+				initialAssignation = this.parseExpression(0);
 				this.lexer.skipWhitespaces(false); // Eat whitespaces
 			}
 			
 			// Can't have a non default parameter after a default one
-			if (!initialAssignation && list.length && list[list.length - 1].initialAssignation) {
-				this.inputStream.throw('XP0421: Cannot have a non default parameter after a default one');
-			}
+			if(initialAssignation == null && list.size() > 0 && list.get(list.size() - 1).getInitialAssignation() != null)
+				throw new DefaultArgumentOrderException(new XpellaParserBookmark(this.inputStream));
 			
-			list.push(new XpellaASTVariableDeclaration([], '', name, type, 'public', [], initialAssignation));
+			list.add(new XpellaASTVariableDeclaration(name, type, "public", new ArrayList<>(), initialAssignation));
 			
-			if (this.inputStream.peek() === ',') {
-				this.lexer.eatChar(',');
-			}
+			if(this.inputStream.peek().equals(","))
+				this.lexer.eatChar(",");
 			
-			this.lexer.skipWhitespaces(false); // Eat whitespaces
+			this.lexer.skipWhitespaces(); // Eat whitespaces
 		}
 		
-		this.lexer.skipWhitespaces(false); // Eat whitespaces
-		this.lexer.eatChar(')');
+		this.lexer.skipWhitespaces(); // Eat whitespaces
+		this.lexer.eatChar(")");
 		
 		return list;
 	}
 	
 	public XpellaASTStatement parseStatement(boolean createScopeIfNeeded)
-			throws UnexpectedCharacterException, MethodNotFoundException, WrongMethodArgumentsException, NoThisException,
-			NoDeclaredOperatorException, StaticCallException, MemberNotFoundException, NoMethodReturnTypeException,
-			UnmetExpectationException, WrongOperatorArgumentTypeException, ScopeException, TypeNotFoundException,
-			NotAFunctionException
+			throws UnmetExpectationException, UnexpectedCharacterException, NoThisException, VariableAssignmentException,
+			MethodNotFoundException, WrongMethodArgumentsException, TypeCoercionException, ScopeException,
+			NoDeclaredOperatorException, MemberNotFoundException, NoMethodReturnTypeException, StaticCallException,
+			TypeNotFoundException, NotAFunctionException, NameReservedException, ParserVariableAlreadyDeclaredException,
+			CannotAssignValueException, UndefinedOperatorException, ComplexAssignmentException, NameConflictException
 	{
 		this.lexer.skipWhitespaces(); // Eat whitespaces
 	
@@ -288,10 +296,12 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 				int expressionPosition = this.inputStream.getCurrentPosition();
 				expression = this.parseExpression(0);
 				// TODO Check if type is assignable from
-				if (!expression.getResolvedType().equals(this.currentFunctionExpectedReturnType)) {
+				if (!expression.getResolvedType().equals(this.currentFunctionExpectedReturnType))
+				{
 					this.inputStream.rewind(expressionPosition);
-					this.inputStream.throw('XP041E: Expected type "' + this.currentFunctionExpectedReturnType
-							+ '" (from method return type), got "' + expression.resolvedType + '"');
+					throw new UnmetExpectationException("Expected type \"" + this.currentFunctionExpectedReturnType +
+							"\" (from method return type), got \"" + expression.getResolvedType() + "\"",
+							new XpellaParserBookmark(this.inputStream));
 				}
 			}
 			this.lexer.skipWhitespaces(); // Eat whitespaces
@@ -321,183 +331,203 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 	
 	// Not required to be a simple expression, can also be a variable declaration and/or assignation
 	public XpellaASTStatement parseExpressionStatement()
+			throws UnmetExpectationException, UnexpectedCharacterException, NoThisException, VariableAssignmentException,
+			MethodNotFoundException, WrongMethodArgumentsException, TypeCoercionException, ScopeException,
+			NoDeclaredOperatorException, MemberNotFoundException, NoMethodReturnTypeException, StaticCallException,
+			TypeNotFoundException, NotAFunctionException, NameReservedException, ParserVariableAlreadyDeclaredException,
+			CannotAssignValueException, UndefinedOperatorException, ComplexAssignmentException, NameConflictException
 	{
-	this.lexer.skipWhitespaces(false); // Eat whitespaces
-
-    const initialPosition = this.inputStream.getCurrentPosition();
-    const firstWord = this.lexer.readWord();
-	this.lexer.skipWhitespaces(false); // Eat whitespaces
-	// We have a word, but it does not corresponds to a language keyword, so it can be
-	// 1. a variable declaration : [type] [identifier] ([operator] [expression]);
-	// 2. an assignation : [identifier] [operator] [expression];
-	// 3. a plain expression : [expression];
+		this.lexer.skipWhitespaces(); // Eat whitespaces
 	
-	// Try to read a second word, then try to read an operator
-    const ipos = XpellaParserBookmark.fromInputStream(this.inputStream);
-    const possibleIdentifier = this.lexer.readWord();
-	
-	this.lexer.skipWhitespaces(false); // Eat whitespaces
-	let operatorPosition = this.inputStream.getCurrentPosition();
-	let possibleOperator = this.lexer.readOperator();
-	
-	this.lexer.skipWhitespaces(false); // Eat whitespaces
-	
-	let statement: XpellaASTStatement;
-	
-	let preresolvedLHS: XpellaASTExpression = null;
-	
-	if (this.inputStream.peek() === XpellaParserObjectAccessor && !possibleIdentifier) {
-		// Well, we face an object call at first, resolve it
-		this.inputStream.rewind(initialPosition);
-      const callee = this.resolveVariableOrLiteral();
-		preresolvedLHS = this.maybeObjectCall(callee);
+		int initialPosition = this.inputStream.getCurrentPosition();
+		String firstWord = this.lexer.readWord();
+		this.lexer.skipWhitespaces(); // Eat whitespaces
+		// We have a word, but it does not corresponds to a language keyword, so it can be
+		// 1. a variable declaration : [type] [identifier] ([operator] [expression]);
+		// 2. an assignation : [identifier] [operator] [expression];
+		// 3. a plain expression : [expression];
 		
-		// Then find out if we have a statement operator
-		this.lexer.skipWhitespaces(false); // Eat whitespaces
-		operatorPosition = this.inputStream.getCurrentPosition();
-		possibleOperator = this.lexer.readOperator();
-	}
-
-    const hasOperator: boolean = !!(possibleOperator && this.lexer.isStatementOperator(possibleOperator));
-    const hasIdentifier: boolean = !!possibleIdentifier;
-    const isDeclaration: boolean = hasIdentifier
-			&& (hasOperator || this.inputStream.peek() === XpellaParserLineDelimiter);
-	
-	if (hasOperator && preresolvedLHS instanceof XpellaASTObjectCallMethod) {
-		this.inputStream.throw('XP041F: Cannot assign a value to a method return', possibleOperator.length);
-	}
-	
-	if (!isDeclaration && !hasOperator) {
-		// This must be a plain expression
-		this.inputStream.rewind(initialPosition);
-		if (preresolvedLHS) {
-			statement = this.solveExpression(preresolvedLHS);
-		} else {
-			statement = this.parseExpression();
-		}
-	} else if (isDeclaration) {
-		// This is a declaration (with or without assignment)
-		// No need to check for a pre resolved call, this can't happen
+		// Try to read a second word, then try to read an operator
+		XpellaParserBookmark ipos = new XpellaParserBookmark(this.inputStream);
+		String possibleIdentifier = this.lexer.readWord();
 		
-		// Try to get type, this throws if it does not exists, so it also acts like a check
-      const type = this.getType(firstWord);
+		this.lexer.skipWhitespaces(); // Eat whitespaces
+		int operatorPosition = this.inputStream.getCurrentPosition();
+		String possibleOperator = this.lexer.readOperator();
 		
-		// Check identifier in case it is a reserved keyword
-		this.checkReserved(possibleIdentifier, ipos.line, ipos.column);
+		this.lexer.skipWhitespaces(); // Eat whitespaces
 		
-		// Check if variable exists
-		if (this.variableExists(possibleIdentifier)) {
-			this.inputStream.rewind(ipos.position);
-			this.inputStream.throw('XP0401: Variable "' + possibleIdentifier + '" is already declared in this scope');
-		}
+		XpellaASTStatement statement;
+		XpellaASTObjectCall preresolvedLHS = null;
 		
-		let expression = null;
-		if (hasOperator) {
-			// This is when we have a declaration with an assignment
+		if (this.inputStream.peek().equals(XpellaParserRules.OBJECT_ACCESSOR) && possibleIdentifier.isEmpty()) {
+			// Well, we face an object call at first, resolve it
+			this.inputStream.rewind(initialPosition);
+		  	XpellaASTExpression callee = this.resolveVariableOrLiteral();
+			preresolvedLHS = this.maybeObjectCall(callee).orElse(null);
 			
-			// Only assign operator is accepted on declaration
-			if (possibleOperator !== '=') {
-				this.inputStream.rewind(operatorPosition);
-				this.inputStream.throw('XP0402: Cannot use a complex assigment on a variable declaration, '
-						+ 'only simple assignment operator "=" is accepted');
+			// Then find out if we have a statement operator
+			this.lexer.skipWhitespaces(); // Eat whitespaces
+			operatorPosition = this.inputStream.getCurrentPosition();
+			possibleOperator = this.lexer.readOperator();
+		}
+	
+		boolean hasOperator = !possibleOperator.isEmpty() && this.lexer.isStatementOperator(possibleOperator);
+		boolean hasIdentifier = !possibleIdentifier.isEmpty();
+		boolean isDeclaration = hasIdentifier && (hasOperator || this.inputStream.peek().equals(XpellaParserRules.LINE_DELIMITER));
+		
+		if(hasOperator && preresolvedLHS instanceof XpellaASTObjectCallMethod)
+		{
+			this.inputStream.rewind(this.inputStream.getCurrentPosition() - possibleOperator.length());
+			throw new CannotAssignValueException("method call", new XpellaParserBookmark(this.inputStream));
+		}
+		
+		if(!isDeclaration && !hasOperator)
+		{
+			// This must be a plain expression
+			this.inputStream.rewind(initialPosition);
+			if(preresolvedLHS != null)
+				statement = this.solveExpression(preresolvedLHS, 0);
+			else
+				statement = this.parseExpression(0);
+		}
+		else if(isDeclaration)
+		{
+			// This is a declaration (with or without assignment)
+			// No need to check for a pre resolved call, this can't happen
+			
+			// Try to get type, this throws if it does not exists, so it also acts like a check
+		  	XpellaParserTypeHeader type = this.getType(firstWord);
+			
+			// Check identifier in case it is a reserved keyword
+			this.checkReserved(possibleIdentifier, ipos);
+			
+			// Check if variable exists
+			if(this.scopeManager.exists(possibleIdentifier))
+			{
+				this.inputStream.rewind(ipos.getPosition());
+				throw new ParserVariableAlreadyDeclaredException(possibleIdentifier, new XpellaParserBookmark(this.inputStream));
+			}
+			
+			XpellaASTExpression expression = null;
+			if (hasOperator)
+			{
+				// This is when we have a declaration with an assignment
+				
+				// Only assign operator is accepted on declaration
+				if(!possibleOperator.equals("="))
+				{
+					this.inputStream.rewind(operatorPosition);
+					throw new ComplexAssignmentException(new XpellaParserBookmark(this.inputStream));
+				}
+				
+				// Parse the assignment expression
+				int expressionPosition = this.inputStream.getCurrentPosition();
+				expression = this.parseExpression(0);
+				
+				// Type check time !! If types are the same, no need to check
+				checkVariableAssignment(expression, type, expressionPosition);
+			}
+			
+			// TODO Modifiers
+			statement = new XpellaASTVariableDeclaration(possibleIdentifier, firstWord, "public", new ArrayList<>(), expression);
+			this.scopeManager.declareMemoryValue(new XpellaParserVariableHeader(possibleIdentifier, firstWord, "public", new ArrayList<>()));
+		} else {
+			// We have a variable assignation
+			String type;
+			String identifier = null;
+			boolean isConst = false;
+			if(preresolvedLHS != null)
+			{
+				XpellaASTObjectCallMember typedPreresolvedLHS = (XpellaASTObjectCallMember)preresolvedLHS;
+				type = typedPreresolvedLHS.getResolvedType();
+				isConst = this.getMemberInType(typedPreresolvedLHS.getObject().getResolvedType(),
+								typedPreresolvedLHS.getMember().getIdentifier())
+						.getModifiers().stream().anyMatch(id -> id.equals("const"));
+			}
+			else
+			{
+				XpellaParserVariableHeader variable = this.scopeManager.getMemoryValue(firstWord);
+				isConst = variable.getModifiers().stream().anyMatch(id -> id.equals("const"));
+				type = variable.getType();
+				identifier = firstWord;
+			}
+			
+			if(isConst)
+				throw new CannotAssignValueException("const variable", new XpellaParserBookmark(this.inputStream));
+	
+		  	XpellaParserTypeHeader variableType = this.getType(type);
+			String baseOperator = "";
+			// Verify that assignation operator is supported
+			if(possibleOperator.length() > 1)
+			{ // Complex operator, need to check, otherwise it is a simple assignation
+				baseOperator = possibleOperator.substring(0, possibleOperator.length() - 1);
+				if(!variableType.getOperators().containsKey(baseOperator))
+				{
+					this.inputStream.rewind(operatorPosition);
+					throw new UndefinedOperatorException("Cannot use assignment operator \"" + possibleOperator +
+							"\" on type \"" + type + "\" : base operator \"" + baseOperator + "\" is not defined on type",
+							new XpellaParserBookmark(this.inputStream));
+				}
 			}
 			
 			// Parse the assignment expression
-        const expressionPosition = this.inputStream.getCurrentPosition();
-			expression = this.parseExpression();
+		  	int expressionPosition = this.inputStream.getCurrentPosition();
+			XpellaASTExpression assignmentExpression = this.parseExpression(0);
 			
-			// Type check time !! If types are the same, no need to check
-			if (expression.resolvedType !== firstWord
-					&& (!type.operators['='] || !type.operators['='][expression.resolvedType])) {
-				this.inputStream.rewind(expressionPosition);
-				this.inputStream.throw('XP0403: Cannot assign expression of type "' + expression.resolvedType
-						+ '" to variable of type "' + firstWord + '"');
+			// If this is a complex operator, left hand must support the operation with the right hand type
+			if(!baseOperator.isEmpty())
+			{
+				if (!variableType.getOperators().get(baseOperator).getAcceptedTypes().contains(assignmentExpression.getResolvedType()))
+				{
+					this.inputStream.rewind(operatorPosition);
+					throw new TypeCoercionException(baseOperator, type, assignmentExpression.getResolvedType(),
+							new XpellaParserBookmark(this.inputStream));
+				}
+				else
+				{
+					// Add the operator to the expression
+					assignmentExpression = new XpellaASTExpressionOperator(
+							type,
+							baseOperator,
+							preresolvedLHS != null ? preresolvedLHS : new XpellaASTVariable(type, identifier),
+							assignmentExpression);
+				}
 			}
+			
+			// Check assignment type, if types are the same, no need to check
+			checkVariableAssignment(assignmentExpression, variableType, expressionPosition);
+			
+			statement = new XpellaASTAssignment(
+					preresolvedLHS != null ? (XpellaASTObjectCallMember)preresolvedLHS : new XpellaASTVariable(type, identifier),
+					assignmentExpression);
 		}
 		
-		// TODO Modifiers
-		statement = new XpellaASTVariableDeclaration([], '', possibleIdentifier, firstWord, 'public', [], expression);
-		this.createVariable(new XpellaParserMemberHeader(possibleIdentifier, firstWord, 'public', []));
-	} else {
-		// We have a variable assignation
-		let type;
-		let identifier;
-		let isConst = false;
-		if (preresolvedLHS) {
-        const typedPreresolvedLHS = preresolvedLHS as XpellaASTObjectCallMember;
-			type = typedPreresolvedLHS.resolvedType;
-			isConst = this.getMemberInType(typedPreresolvedLHS.object.resolvedType,
-					typedPreresolvedLHS.member.identifier)
-					.modifiers.some((id) => id === 'const');
-		} else {
-        const variable = this.getVariable(firstWord);
-			isConst = variable.modifiers.some((id) => id === 'const');
-			type = variable.type;
-			identifier = identifier;
-		}
+		this.lexer.skipWhitespaces(); // Eat whitespaces
+		this.lexer.eatChar(XpellaParserRules.LINE_DELIMITER);
 		
-		if (isConst) {
-			this.inputStream.throw('XP0420: Cannot assign a value to a const variable');
-		}
-
-      const variableType = this.getType(type);
-		let baseOperator: string;
-		// Verify that assignation operator is supported
-		if (possibleOperator.length > 1) { // Complex operator, need to check, otherwise it is a simple assignation
-			baseOperator = possibleOperator.slice(0, possibleOperator.length - 1);
-			if (!variableType.operators[baseOperator]) {
-				this.inputStream.rewind(operatorPosition);
-				this.inputStream.throw('XP0404: Cannot use  assignment operator "' + possibleOperator
-						+ '" on type "' + type + '" : base operator "' + baseOperator + '" is not defined on type');
-			}
-		}
-		
-		// Parse the assignment expression
-      const expressionPosition = this.inputStream.getCurrentPosition();
-		let assignmentExpression = this.parseExpression();
-		
-		// If this is a complex operator, left hand must support the operation with the right hand type
-		if (baseOperator) {
-			if (!variableType.operators[baseOperator][assignmentExpression.resolvedType]) {
-				this.inputStream.rewind(operatorPosition);
-				this.inputStream.throw('XP0405: Operator "' + baseOperator + '" from type "' + type
-						+ '" cannot accept type "' + assignmentExpression.resolvedType + '"');
-			} else {
-				// Add the operator to the expression
-				assignmentExpression = new XpellaASTExpressionOperator(
-						[], '',
-						type,
-						baseOperator,
-						preresolvedLHS ? preresolvedLHS : new XpellaASTVariable([], '', type, identifier),
-				assignmentExpression);
-			}
-		}
-		
-		// Check assignment type, if types are the same, no need to check
-		if (assignmentExpression.resolvedType !== type
-				&& (!variableType.operators['='] || !variableType.operators['='][assignmentExpression.resolvedType])) {
-			this.inputStream.rewind(expressionPosition);
-			this.inputStream.throw('XP0406: Cannot assign expression of type "' + assignmentExpression.resolvedType
-					+ '" to variable of type "' + type + '"');
-		}
-		
-		statement = new XpellaASTAssignment(
-				[], '',
-				preresolvedLHS ? preresolvedLHS as XpellaASTObjectCallMember : new XpellaASTVariable([], '', type, identifier),
-		assignmentExpression);
+		return statement;
 	}
 	
-	this.lexer.skipWhitespaces(false); // Eat whitespaces
-	this.lexer.eatChar(XpellaParserLineDelimiter);
-	
-	return statement;
-}
+	protected void checkVariableAssignment(XpellaASTExpression expr, XpellaParserTypeHeader variableType, int rewindPos)
+			throws VariableAssignmentException
+	{
+		if(!expr.getResolvedType().equals(variableType.getIdentifier()) &&
+				(!variableType.getOperators().containsKey("=") ||
+						!variableType.getOperators().get("=").getAcceptedTypes().contains(expr.getResolvedType())))
+		{
+			this.inputStream.rewind(rewindPos);
+			throw new VariableAssignmentException(variableType.getIdentifier(), expr.getResolvedType(),
+					new XpellaParserBookmark(this.inputStream));
+		}
+	}
 	
 	public XpellaASTStatement parseCondition()
-			throws UnexpectedCharacterException, MethodNotFoundException, ScopeException, NotAFunctionException,
-			WrongMethodArgumentsException, WrongOperatorArgumentTypeException, StaticCallException, NoThisException,
-			NoDeclaredOperatorException, MemberNotFoundException, NoMethodReturnTypeException, TypeNotFoundException,
-			UnmetExpectationException
+			throws UnmetExpectationException, UnexpectedCharacterException, VariableAssignmentException, NoThisException,
+			MethodNotFoundException, WrongMethodArgumentsException, TypeCoercionException, ScopeException,
+			NoDeclaredOperatorException, MemberNotFoundException, NoMethodReturnTypeException, StaticCallException,
+			TypeNotFoundException, NotAFunctionException, NameReservedException, ParserVariableAlreadyDeclaredException,
+			CannotAssignValueException, UndefinedOperatorException, ComplexAssignmentException, NameConflictException
 	{
 		// If/else
 		this.lexer.skipWhitespaces();
@@ -508,15 +538,16 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 		this.lexer.eatChar("(");
 		this.lexer.skipWhitespaces(); // Eat whitespaces
 		int expressionPosition = this.inputStream.getCurrentPosition();
-		if (this.inputStream.peek().equals(")"))
-			this.inputStream.throw('XP0407: Expected condition expression');
+		
+		if(this.inputStream.peek().equals(")"))
+			throw new UnmetExpectationException("Expected condition expression", new XpellaParserBookmark(this.inputStream));
 		
 		// Parse expression in parenthesis
 		XpellaASTExpression condition = this.parseExpression(0);
 		if(!condition.getResolvedType().equals("boolean"))
 		{
 			this.inputStream.rewind(expressionPosition);
-			this.inputStream.throw('XP0408: Expected expression to resolve to a boolean');
+			throw new UnmetExpectationException("Expected expression to resolve to a boolean", new XpellaParserBookmark(this.inputStream));
 		}
 		
 		this.lexer.skipWhitespaces(); // Eat whitespaces
@@ -524,7 +555,7 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 		this.lexer.skipWhitespaces(); // Eat whitespaces
 		
 		XpellaParserBookmark passConditionBookmark = new XpellaParserBookmark(this.inputStream);
-		this.scopeManager.createChildScope(new ArrayList<>());
+		this.scopeManager.createChildScope(null);
 		XpellaASTStatement passConditionExecution = this.optimizeScopedStatement(this.parseStatement(false), passConditionBookmark);
 		this.scopeManager.removeChildScope();
 		
@@ -539,7 +570,7 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 			// We have a else
 			this.lexer.skipWhitespaces(false); // Eat whitespaces
 			XpellaParserBookmark failConditionBookmark = new XpellaParserBookmark(this.inputStream);
-			this.scopeManager.createChildScope(new ArrayList<>());
+			this.scopeManager.createChildScope(null);
 			failConditionExecution = this.optimizeScopedStatement(this.parseStatement(false), failConditionBookmark);
 			this.scopeManager.removeChildScope();
 		}
@@ -548,8 +579,6 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 		
 		// Don't return a block if we have nothing to execute
 		if(passConditionExecution == null && failConditionExecution == null)
-			return null;
-		else if(condition == null && failConditionExecution == null)
 			return null;
 		else if(condition instanceof XpellaASTLiteral)
 		{
@@ -568,10 +597,11 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 	}
 	
 	public XpellaASTStatement parseBlock(boolean createScope)
-			throws UnexpectedCharacterException, ScopeException, MethodNotFoundException, NotAFunctionException,
-			WrongMethodArgumentsException, WrongOperatorArgumentTypeException, UnmetExpectationException, NoThisException,
-			MemberNotFoundException, NoMethodReturnTypeException, StaticCallException, TypeNotFoundException,
-			NoDeclaredOperatorException
+			throws UnmetExpectationException, UnexpectedCharacterException, VariableAssignmentException, NoThisException,
+			MethodNotFoundException, WrongMethodArgumentsException, TypeCoercionException, ScopeException,
+			NoDeclaredOperatorException, MemberNotFoundException, NoMethodReturnTypeException, StaticCallException,
+			TypeNotFoundException, NotAFunctionException, NameReservedException, ParserVariableAlreadyDeclaredException,
+			CannotAssignValueException, UndefinedOperatorException, ComplexAssignmentException, NameConflictException
 	{
 		// Eat whitespaces
 		this.lexer.skipWhitespaces();
@@ -581,7 +611,7 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 		List<XpellaASTStatement> statements = new ArrayList<>();
 		
 		if(createScope)
-			this.scopeManager.createChildScope(new ArrayList<>());
+			this.scopeManager.createChildScope(null);
 		
 		while (!this.inputStream.peek().equals("}"))
 		{
@@ -595,7 +625,8 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 		
 		this.lexer.eatChar("}");
 		
-		this.scopeManager.removeChildScope();
+		if(createScope)
+			this.scopeManager.removeChildScope();
 		
 		if(statements.isEmpty())
 			return null;
@@ -621,7 +652,8 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 	 * Throws an error if identifier is reserved.
 	 * @param identifier The identifier to test
 	 */
-	public void checkReserved(String identifier, XpellaParserBookmark bookmark) throws NameReservedException
+	public void checkReserved(String identifier, XpellaParserBookmark bookmark)
+			throws NameReservedException, NameConflictException
 	{
 		if(identifier.equals(XpellaParserRules.THIS_KEYWORD) || identifier.equals(XpellaParserRules.TYPE_INSTANTIATION_KEYWORD))
 		{
@@ -632,7 +664,7 @@ public class XpellaParser extends XpellaAbstractExpressionParser
 			this.declaredTypes.stream().anyMatch(type -> type.getIdentifier().equals(identifier)))
 		{
 			this.inputStream.rewind(this.inputStream.getCurrentPosition() - identifier.length());
-			this.inputStream.throw('XP040B: "' + identifier + '" is a declared type, name conflicts with type object');
+			throw new NameConflictException(identifier, bookmark);
 		}
 		else if(XpellaParserRules.STATEMENT_KEYWORDS.contains(identifier))
 		{
