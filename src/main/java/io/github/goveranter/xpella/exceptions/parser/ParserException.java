@@ -7,6 +7,6 @@ public abstract class ParserException extends XpellaException
 {
 	public ParserException(String message, XpellaParserBookmark bookmark)
 	{
-		super(message + " (line " + bookmark.getLine() + ", col " + bookmark.getColumn());
+		super(message + " (line " + bookmark.getLine() + ", col " + bookmark.getColumn() + ")");
 	}
 }
