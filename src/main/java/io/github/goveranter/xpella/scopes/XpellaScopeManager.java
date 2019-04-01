@@ -91,8 +91,16 @@ public class XpellaScopeManager<T extends ScopeVariable>
 		if (!this.getCurrentScope().setInScopes(variable))
 			throw new UndeclaredVariableException(variable.getIdentifier(), true);
 	}
+	/** Similar to call exists(identifier, false) */
 	public boolean exists(String identifier) throws NoContextScopeException
 	{
-		return this.getCurrentScope().existsInScopes(identifier);
+		return exists(identifier, false);
+	}
+	public boolean exists(String identifier, boolean canShadow) throws NoContextScopeException
+	{
+		if(canShadow)
+			return this.getCurrentScope().existsInCurrentScope(identifier);
+		else
+			return this.getCurrentScope().existsInScopes(identifier);
 	}
 }
